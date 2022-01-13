@@ -1,0 +1,17 @@
+{
+    "sa_keyfile": "YOUR_FILE",
+    "spreadsheet_id": "YOUR_GOOGLE_SPREADSHEET_ID",
+    "sheets": {
+        "Sheet1": {
+            "headers": "COMMA_SEPARATED_LIST",
+		    "range": "YOUR_A1_NOTATION_RANGE"
+        },
+	    "Sheet2": {
+            "headers": "COMMA_SEPARATED_LIST",
+		    "range": "YOUR_A1_NOTATION_RANGE"
+        }
+    },
+    "start_date": "2019-01-01T00:00:00Z",
+    "user_agent": "tap-google-sheets <api_user_email@example.com>",
+    "batch_size": 500
+}

@@ -1,0 +1,1 @@
+include tap_google_sheets_range/schemas/*.json
