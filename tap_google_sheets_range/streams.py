@@ -1,70 +1,15 @@
 import json
-import os
 import re
-import urllib
 from datetime import datetime, timedelta
 
-import pytz
 import singer
 from singer import utils
 from singer.utils import strftime
 from collections import OrderedDict
+from tap_google_sheets_range.utils import excel_to_dttm_str, col_string_to_num, col_num_to_string, get_schema_from_file, encode_string
 
 
 LOGGER = singer.get_logger()
-
-
-# Convert Excel Date Serial Number (excel_date_sn) to datetime string
-# timezone_str: defaults to UTC (which we assume is the timezone for ALL datetimes)
-def excel_to_dttm_str(excel_date_sn, timezone_str=None):
-    if not timezone_str:
-        timezone_str = 'UTC'
-    tzn = pytz.timezone(timezone_str)
-    sec_per_day = 86400
-    excel_epoch = 25569 # 1970-01-01T00:00:00Z, Lotus Notes Serial Number for Epoch Start Date
-    # Seems math.floor should be removed, example 2022-01-01 10:00:00 -> 2022-01-01 09:59:59
-    # epoch_sec = math.floor((excel_date_sn - excel_epoch) * sec_per_day)
-    epoch_sec = round((excel_date_sn - excel_epoch) * sec_per_day)
-    epoch_dttm = datetime(1970, 1, 1)
-    excel_dttm = epoch_dttm + timedelta(seconds=epoch_sec)
-    utc_dttm = tzn.localize(excel_dttm).astimezone(pytz.utc)
-    utc_dttm_str = strftime(utc_dttm)
-    return utc_dttm_str
-
-
-# Convert column letter to column index
-def col_string_to_num(col: str):
-    value = col.upper()
-    if len(value) == 1:
-        return ord(value)%64
-    elif len(value) == 2:
-        return 26 + (ord(value[0])%64) * (ord(value[1])%64)
-    elif len(value) == 3:
-        return 26 + 26 ** 2 + (ord(value[0])%64) * (ord(value[1])%64) * (ord(value[2])%64)
-    else:
-        raise ValueError(f"Wrong column name [{col}]")
-
-
-# Convert column index to column letter
-def col_num_to_string(num):
-    string = ""
-    while num > 0:
-        num, remainder = divmod(num - 1, 26)
-        string = chr(65 + remainder) + string
-    return string
-
-
-def get_schema_from_file(stream_name):
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    schema_path = os.path.join(dir_path, 'schemas/{}.json'.format(stream_name))
-
-    with open(schema_path) as file:
-        schema = json.load(file)
-    return schema
-
-
-def encode_string(value):
-    return urllib.parse.quote_plus(value)
 
 
 # streams: API URL endpoints to be called
@@ -190,8 +135,10 @@ class Sheet(Stream):
 
         headers = self.config.get_sheet_headers(self.sheet_title)
         first_row = row_data[0].get('values', [])
-        if len(first_row) != len(headers):
-            raise ValueError("Column count doesn't equal to header count")
+        # Google api doesn't return metadata for empty cells at the end of the requested range
+        # Pad the first row with default value
+        for i in range(len(headers) - len(first_row)):
+            first_row.append(OrderedDict())
 
         sheet_json_schema = {
             'type': 'object',

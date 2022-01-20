@@ -1,7 +1,66 @@
+import json
+import os
 import re
+import urllib
+from datetime import datetime, timedelta
+
+import pytz
 import singer
+from singer import strftime
 
 LOGGER = singer.get_logger()
+
+
+# Convert Excel Date Serial Number (excel_date_sn) to datetime string
+# timezone_str: defaults to UTC (which we assume is the timezone for ALL datetimes)
+def excel_to_dttm_str(excel_date_sn, timezone_str=None):
+    if not timezone_str:
+        timezone_str = 'UTC'
+    tzn = pytz.timezone(timezone_str)
+    sec_per_day = 86400
+    excel_epoch = 25569 # 1970-01-01T00:00:00Z, Lotus Notes Serial Number for Epoch Start Date
+    # Seems math.floor should be removed, example 2022-01-01 10:00:00 -> 2022-01-01 09:59:59
+    # epoch_sec = math.floor((excel_date_sn - excel_epoch) * sec_per_day)
+    epoch_sec = round((excel_date_sn - excel_epoch) * sec_per_day)
+    epoch_dttm = datetime(1970, 1, 1)
+    excel_dttm = epoch_dttm + timedelta(seconds=epoch_sec)
+    utc_dttm = tzn.localize(excel_dttm).astimezone(pytz.utc)
+    utc_dttm_str = strftime(utc_dttm)
+    return utc_dttm_str
+
+
+# Convert column letter to column index
+def col_string_to_num(col: str):
+    value = col.upper()
+    if len(value) == 1:
+        return ord(value)%64
+    elif len(value) == 2:
+        return 26 + (ord(value[0])%64) * (ord(value[1])%64)
+    elif len(value) == 3:
+        return 26 + 26 ** 2 + (ord(value[0])%64) * (ord(value[1])%64) * (ord(value[2])%64)
+    else:
+        raise ValueError(f"Wrong column name [{col}]")
+
+
+# Convert column index to column letter
+def col_num_to_string(num):
+    string = ""
+    while num > 0:
+        num, remainder = divmod(num - 1, 26)
+        string = chr(65 + remainder) + string
+    return string
+
+def get_schema_from_file(stream_name):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    schema_path = os.path.join(dir_path, 'schemas/{}.json'.format(stream_name))
+
+    with open(schema_path) as file:
+        schema = json.load(file)
+    return schema
+
+
+def encode_string(value):
+    return urllib.parse.quote_plus(value)
 
 
 class Config:
@@ -83,3 +142,11 @@ class Config:
                 raise ValueError('Wrong sheet config. Range doesnt match to the pattern.'
                                  ' Sheet: [{}] Range:[{}] Pattern: [{}]'.
                                  format(sheet, self.get_sheet_cell_range(sheet), pattern))
+            cols_count = col_string_to_num(self.get_last_column(sheet)) - \
+                         col_string_to_num(self.get_column(sheet)) + \
+                         1
+            headers_count = len(self.get_sheet_headers(sheet))
+            if headers_count != cols_count:
+                raise ValueError("Wrong sheet config. Columns count doesn't equal to headers count"
+                                 ' Sheet:[{}] Range:[{}] Headers:[{}] Columns:[{}]'.
+                                 format(sheet, self.get_sheet_cell_range(sheet), headers_count, cols_count))
