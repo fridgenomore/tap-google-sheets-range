@@ -6,8 +6,7 @@ import singer
 from singer import utils
 from singer.utils import strftime
 from collections import OrderedDict
-from tap_google_sheets_range.utils import excel_to_dttm_str, col_string_to_num, col_num_to_string, encode_string
-from schema import get_schema_from_file
+from tap_google_sheets_range.utils import excel_to_dttm_str, col_string_to_num, col_num_to_string, encode_string, get_schema_from_file
 
 
 LOGGER = singer.get_logger()

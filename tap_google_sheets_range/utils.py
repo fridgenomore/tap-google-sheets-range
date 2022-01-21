@@ -55,6 +55,15 @@ def encode_string(value):
     return urllib.parse.quote_plus(value)
 
 
+def get_schema_from_file(stream_name):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    schema_path = os.path.join(dir_path, 'schemas/{}.json'.format(stream_name))
+
+    with open(schema_path) as file:
+        schema = json.load(file)
+    return schema
+
+
 class Config:
     def __init__(self, sa_keyfile, spreadsheet_id, sheets, start_date, user_agent,
                  batch_size=None, request_timeout=None):
