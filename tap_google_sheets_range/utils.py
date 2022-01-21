@@ -50,14 +50,6 @@ def col_num_to_string(num):
         string = chr(65 + remainder) + string
     return string
 
-def get_schema_from_file(stream_name):
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    schema_path = os.path.join(dir_path, 'schemas/{}.json'.format(stream_name))
-
-    with open(schema_path) as file:
-        schema = json.load(file)
-    return schema
-
 
 def encode_string(value):
     return urllib.parse.quote_plus(value)
@@ -75,9 +67,10 @@ class Config:
         self.request_timeout = request_timeout or 300
 
     class SheetConfig:
-        def __init__(self, headers, data):
+        def __init__(self, headers, data, target_table=None):
             self.headers = headers
             self.data = data
+            self.target_table = target_table
 
     def read_sheet_config(self, config):
         if not config:
@@ -102,6 +95,13 @@ class Config:
         if not headers:
             return []
         return [h.strip() for h in headers.strip(',').split(',')]
+
+    def get_sheet_target_table(self, sheet_title):
+        table = self.sheets.get(sheet_title).target_table
+        if table is None:
+            return '_'.join([sheet_title, self.spreadsheet_id]).replace('-', '__')
+            # return sheet_title
+        return table
 
     def get_column(self, sheet):
         range = self.get_sheet_cell_range(sheet).split(':')
@@ -139,7 +139,7 @@ class Config:
                 raise ValueError('Wrong sheet config. Range is empty. Sheet: [{}]'.format(sheet))
             pattern = '[A-Z]{1,3}[0-9]*:[A-Z]{1,3}[0-9]*'
             if not re.match(pattern, self.get_sheet_cell_range(sheet)):
-                raise ValueError('Wrong sheet config. Range doesnt match to the pattern.'
+                raise ValueError('Wrong sheet config. Range doesn\'t match to the pattern.'
                                  ' Sheet: [{}] Range:[{}] Pattern: [{}]'.
                                  format(sheet, self.get_sheet_cell_range(sheet), pattern))
             cols_count = col_string_to_num(self.get_last_column(sheet)) - \

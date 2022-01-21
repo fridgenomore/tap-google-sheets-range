@@ -1,12 +1,13 @@
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import singer
 from singer import utils
 from singer.utils import strftime
 from collections import OrderedDict
-from tap_google_sheets_range.utils import excel_to_dttm_str, col_string_to_num, col_num_to_string, get_schema_from_file, encode_string
+from tap_google_sheets_range.utils import excel_to_dttm_str, col_string_to_num, col_num_to_string, encode_string
+from schema import get_schema_from_file
 
 
 LOGGER = singer.get_logger()
@@ -14,7 +15,6 @@ LOGGER = singer.get_logger()
 
 # streams: API URL endpoints to be called
 # properties:
-#   <root node>: Plural stream name for the endpoint
 #   path: API endpoint relative path, when added to the base URL, creates the full path,
 #       default = stream_name
 #   key_properties: Primary key fields for identifying an endpoint record.
@@ -125,12 +125,11 @@ class Sheet(Stream):
 
     def get_sheet_columns_schema(self):
         sheet_metadata = self.get_sheet_metadata()
-        sheet_title = self.sheet_title
         sheet_json_schema = OrderedDict()
         data = next(iter(sheet_metadata.get('data', [])), {})
         row_data = data.get('rowData', [])
         if row_data == []:
-            LOGGER.info('SKIPPING sheet: {}. The sheet is empty or no data found in the first row'.format(sheet_title))
+            LOGGER.info('SKIPPING sheet: {}. The sheet is empty or no data found in the first row'.format(self.sheet_title))
             return None, None
 
         headers = self.config.get_sheet_headers(self.sheet_title)
@@ -166,7 +165,7 @@ class Sheet(Stream):
         column_index = col_string_to_num(first_column_letter)
         i = 0
         LOGGER.info("Reading metadata from the first row [SHEET_NAME: {}, ROW: {}, LETTER: {}, COL_INDEX: {}]".format(
-            sheet_title, first_row_index, first_column_letter, column_index))
+            self.sheet_title, first_row_index, first_column_letter, column_index))
 
         for header in headers:
             column_letter = col_num_to_string(column_index)
@@ -182,7 +181,7 @@ class Sheet(Stream):
                 column_effective_value_type = 'stringValue'
                 LOGGER.info('WARNING: NO VALUE IN THE {}ND ROW [SHEET: {}, COL: {}, CELL: {}{}]'
                             ' -> Setting column datatype to STRING'.
-                            format(first_row_index, sheet_title, column_name, column_letter, first_row_index))
+                            format(first_row_index, self.sheet_title, column_name, column_letter, first_row_index))
             else:
                 for key, val in column_effective_value.items():
                     if key in ('numberValue', 'stringValue', 'boolValue'):
@@ -191,7 +190,7 @@ class Sheet(Stream):
                     elif key in ('errorType', 'formulaType'):
                         col_val = str(val)
                         raise Exception('DATA TYPE ERROR [SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}]'.format(
-                            sheet_title, column_name, column_letter, first_row_index, key))
+                            self.sheet_title, column_name, column_letter, first_row_index, key))
 
             column_number_format = first_row[i].get('effectiveFormat', {}).get('numberFormat', {})
             column_number_format_type = column_number_format.get('type')
@@ -254,7 +253,7 @@ class Sheet(Stream):
                 col_properties = {'type': ['null', 'string']}
                 column_gs_type = 'unsupportedValue'
                 LOGGER.info('WARNING: UNSUPPORTED {}ND ROW VALUE [SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}]'.format(
-                    first_row_index, sheet_title, column_name,
+                    first_row_index, self.sheet_title, column_name,
                     column_letter, first_row_index, column_effective_value_type))
                 LOGGER.info('Converting to string.')
 
@@ -318,8 +317,8 @@ class SheetData(Sheet):
 
     def __init__(self, client, config, state, sheet_title):
         super().__init__(client, config, state, sheet_title)
-        self.stream_id = '_'.join([sheet_title, config.spreadsheet_id]).replace('-', '__')
-        self.stream_name = '_'.join([sheet_title, config.spreadsheet_id]).replace('-', '__')
+        self.stream_id = config.get_sheet_target_table(sheet_title)
+        self.stream_name = config.get_sheet_target_table(sheet_title)
 
     def get_schema(self):
         try:
@@ -334,7 +333,7 @@ class SheetData(Sheet):
 
     # Transform sheet_data: add spreadsheet_id, sheet_id, and row, convert dates/times
     # Convert from array of values to JSON with column names as keys
-    def transform_data(self, sheet_id, sheet_title, from_row, columns, sheet_data_rows, extracted_time):
+    def transform_data(self, sheet_id, from_row, columns, sheet_data_rows, extracted_time):
         sheet_data_tf = []
         row_num = from_row
         # Create sorted list of columns based on columnIndex
@@ -373,7 +372,7 @@ class SheetData(Sheet):
                             col_val = str(value)
                             LOGGER.info(
                                 'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                    sheet_title, col_name, col_letter, row_num, col_type))
+                                    self.sheet_title, col_name, col_letter, row_num, col_type))
                     # DATE
                     elif col_type == 'numberType.DATE':
                         if isinstance(value, (int, float)):
@@ -382,7 +381,7 @@ class SheetData(Sheet):
                             col_val = str(value)
                             LOGGER.info(
                                 'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                    sheet_title, col_name, col_letter, row_num, col_type))
+                                    self.sheet_title, col_name, col_letter, row_num, col_type))
                     # TIME ONLY (NO DATE)
                     elif col_type == 'numberType.TIME':
                         if isinstance(value, (int, float)):
@@ -394,7 +393,7 @@ class SheetData(Sheet):
                                 col_val = str(value)
                                 LOGGER.info(
                                     'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                        sheet_title, col_name, col_letter, row_num, col_type))
+                                        self.sheet_title, col_name, col_letter, row_num, col_type))
                         else:
                             col_val = str(value)
                     # NUMBER (INTEGER AND FLOAT)
@@ -412,7 +411,7 @@ class SheetData(Sheet):
                                     col_val = str(value)
                                     LOGGER.info(
                                         'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                            sheet_title, col_name, col_letter, row_num, col_type))
+                                            self.sheet_title, col_name, col_letter, row_num, col_type))
                             else:  # decimal_digits <= 15, no rounding
                                 try:
                                     col_val = float(value)
@@ -420,12 +419,12 @@ class SheetData(Sheet):
                                     col_val = str(value)
                                     LOGGER.info(
                                         'WARNING: POSSIBLE DATA TYPE ERROR: SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                            sheet_title, col_name, col_letter, row_num, col_type))
+                                            self.sheet_title, col_name, col_letter, row_num, col_type))
                         else:
                             col_val = str(value)
                             LOGGER.info(
                                 'WARNING: POSSIBLE DATA TYPE ERROR: SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                    sheet_title, col_name, col_letter, row_num, col_type))
+                                    self.sheet_title, col_name, col_letter, row_num, col_type))
                     # STRING
                     elif col_type == 'stringValue':
                         col_val = str(value)
@@ -442,7 +441,7 @@ class SheetData(Sheet):
                                 col_val = str(value)
                                 LOGGER.info(
                                     'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                        sheet_title, col_name, col_letter, row, col_type))
+                                        self.sheet_title, col_name, col_letter, row, col_type))
                         elif isinstance(value, int):
                             if value in (1, -1):
                                 col_val = True
@@ -452,13 +451,13 @@ class SheetData(Sheet):
                                 col_val = str(value)
                                 LOGGER.info(
                                     'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                        sheet_title, col_name, col_letter, row, col_type))
+                                        self.sheet_title, col_name, col_letter, row, col_type))
                     # OTHER: Convert everything else to a string
                     else:
                         col_val = str(value)
                         LOGGER.info(
                             'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                sheet_title, col_name, col_letter, row, col_type))
+                                self.sheet_title, col_name, col_letter, row, col_type))
                     sheet_data_row_tf[col_name] = col_val
                     col_num = col_num + 1
                 # APPEND non-empty row
@@ -469,7 +468,6 @@ class SheetData(Sheet):
     def sync(self):
         sheet_metadata = self.get_sheet_metadata()
 
-        sheet_title = sheet_metadata.get('properties', {}).get('title')
         sheet_id = sheet_metadata.get('properties', {}).get('sheetId')
         sheet_max_row = sheet_metadata.get('properties').get('gridProperties', {}).get('rowCount')
 
@@ -499,7 +497,7 @@ class SheetData(Sheet):
                 .replace('{range_rows}', range_rows)
 
             sheet_data, time_extracted = self.get_data(
-                stream_name=sheet_title,
+                stream_name=self.stream_name,
                 path=path,
                 params=SheetData.params,
                 api=self.api)
@@ -509,7 +507,6 @@ class SheetData(Sheet):
             # Transform batch of rows to JSON with keys for each column
             sheet_data_tf = self.transform_data(
                 sheet_id=sheet_id,
-                sheet_title=sheet_title,
                 from_row=from_row,
                 columns=columns,
                 sheet_data_rows=sheet_data_rows,

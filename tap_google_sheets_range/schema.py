@@ -1,8 +1,20 @@
+import json
+import os
+
 import singer
 from singer import metadata
 from tap_google_sheets_range.streams import STREAMS
 
 LOGGER = singer.get_logger()
+
+
+def get_schema_from_file(stream_name):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    schema_path = os.path.join(dir_path, 'schemas/{}.json'.format(stream_name))
+
+    with open(schema_path) as file:
+        schema = json.load(file)
+    return schema
 
 
 def get_schemas(client, config):
