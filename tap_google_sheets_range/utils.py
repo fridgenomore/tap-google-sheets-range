@@ -8,6 +8,7 @@ import pytz
 import singer
 from singer import strftime
 
+
 LOGGER = singer.get_logger()
 
 
@@ -69,25 +70,19 @@ class Config:
                  batch_size=None, request_timeout=None):
         self.sa_keyfile = sa_keyfile
         self.spreadsheet_id = spreadsheet_id
-        self.sheets = self.read_sheet_config(sheets)
+        self.sheets = self.load_sheet_config(sheets)
         self.start_date = start_date
         self.user_agent = user_agent
         self.batch_size = batch_size or 300
         self.request_timeout = request_timeout or 300
 
-    class SheetConfig:
-        def __init__(self, headers, data, target_table=None):
-            self.headers = headers
-            self.data = data
-            self.target_table = target_table
-
-    def read_sheet_config(self, config):
+    def load_sheet_config(self, config):
         if not config:
             raise ValueError('Wrong config. Sheets list is empty.')
         sheet_config = {}
         try:
             for key, value in config.items():
-                sheet_config[key] = self.SheetConfig(**value)
+                sheet_config[key] = Config.SheetConfig(**value)
         except:
             LOGGER.error('Wrong config. Missing headers/range value.')
             raise
@@ -99,11 +94,15 @@ class Config:
     def get_sheet_cell_range(self, sheet_title):
         return self.sheets.get(sheet_title).data
 
-    def get_sheet_headers(self, sheet_title):
+    def is_extract_link(self, sheet_title):
+        if self.sheets.get(sheet_title).extract_link == True:
+            return True
+        return False
+
+
+    def list_sheet_headers(self, sheet_title):
         headers = self.sheets.get(sheet_title).headers
-        if not headers:
-            return []
-        return [h.strip() for h in headers.strip(',').split(',')]
+        return headers
 
     def get_sheet_target_table(self, sheet_title):
         table = self.sheets.get(sheet_title).target_table
@@ -142,7 +141,7 @@ class Config:
 
     def check_config(self):
         for sheet in self.list_sheets():
-            if not self.get_sheet_headers(sheet):
+            if not self.list_sheet_headers(sheet):
                 raise ValueError('Wrong sheet config. Header list is empty. Sheet: [{}]'.format(sheet))
             if not self.get_sheet_cell_range(sheet):
                 raise ValueError('Wrong sheet config. Range is empty. Sheet: [{}]'.format(sheet))
@@ -154,8 +153,44 @@ class Config:
             cols_count = col_string_to_num(self.get_last_column(sheet)) - \
                          col_string_to_num(self.get_column(sheet)) + \
                          1
-            headers_count = len(self.get_sheet_headers(sheet))
+            headers_count = len(self.list_sheet_headers(sheet))
             if headers_count != cols_count:
                 raise ValueError("Wrong sheet config. Columns count doesn't equal to headers count"
                                  ' Sheet:[{}] Range:[{}] Headers:[{}] Columns:[{}]'.
                                  format(sheet, self.get_sheet_cell_range(sheet), headers_count, cols_count))
+
+    class HeaderConfig:
+        def __init__(self, name, type=None, format=None):
+            if not isinstance(name, str):
+                raise ValueError("Wrong header config. Header name is not a string. Header:[{}]"
+                                 .format(name))
+            self.name = name
+            self.type = type or ["null", "string"]
+            self.format = format
+            self.check_config()
+
+        def check_config(self):
+            format_list = ["color", "email", "idn-email", "ipv4", "ipv6", "ip-address", "hostname",
+                           "host-name", "idn-hostname", "uri" ,"uri-template", "uri-reference",
+                           "iri", "iri-reference", "date-time", "time", "date", "regex",
+                           "uuid", "duration", "json-pointer", "relative-json-pointer"]
+            if self.format and self.format not in format_list:
+                raise ValueError("Wrong header config. Wrong format value, check the list of possible values."
+                                 " Header: [{}] Type: [{}], Format: [{}]"
+                                 .format(self.name, self.type, self.format))
+
+
+    class SheetConfig:
+        def __init__(self, headers, data, target_table=None, extract_link=False):
+            self.headers = self.load_header_config(headers)
+            self.data = data
+            self.target_table = target_table
+            self.extract_link = extract_link
+
+        def load_header_config(self, config):
+            if not config:
+                raise ValueError('Missing headers config.')
+            header_config = []
+            for value in config:
+                header_config.append(Config.HeaderConfig(**value))
+            return header_config

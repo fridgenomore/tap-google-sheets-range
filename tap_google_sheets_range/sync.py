@@ -172,8 +172,7 @@ def sync(client, config, catalog, state):
 
     # Loop throw sheets (worksheet tabs) in spreadsheet
     for sheet_name in sheets:
-        LOGGER.info('STARTED Syncing Sheet [{}]'.format(sheet_name))
-        stream_object = STREAMS.get('sheet_data')(client, config, state, sheet_name)
+        stream_object = STREAMS.get('sheet')(client, config, state, sheet_name)
         stream_name = stream_object.stream_name
 
         update_currently_syncing(state, stream_name)
@@ -197,17 +196,15 @@ def sync(client, config, catalog, state):
                 'INITIAL SYNC, Stream: [{}], Activate Version: [{}]'.format(stream_name, activate_version))
 
         total_row = 0
-        for rows_batch, time_extracted in stream_object.sync():
-
+        for sheet_records, time_extracted in stream_object.sync():
             # Process records, send batch of records to target
             record_count = process_records(
                 catalog=catalog,
                 stream_name=stream_object.stream_name,
-                records=rows_batch,
+                records=sheet_records,
                 time_extracted=time_extracted,
                 version=None)
-            LOGGER.info('Sheet: [{}], records processed: [{}]'.format(
-                sheet_name, record_count))
+            LOGGER.info('Sheet: [{}], records processed: [{}]'.format(sheet_name, record_count))
             total_row += record_count
 
         # End of Stream: Send Activate Version and update State
@@ -215,10 +212,6 @@ def sync(client, config, catalog, state):
         write_bookmark(state, stream_name, activate_version)
         LOGGER.info('COMPLETED Syncing Sheet [{}], Total Rows: [{}]'.format(sheet_name, total_row))
         update_currently_syncing(state, None)
-
-        # stream_name = 'sheet_metadata'
-        # stream_object = STREAMS.get(stream_name)(client, config, state, sheet_name)
-        # sync_stream(stream_object.stream_name, selected_streams, catalog, state, stream_object.sync())
 
     # Update file_metadata bookmark
     write_bookmark(state, 'file_metadata', strftime(file_mtime))
