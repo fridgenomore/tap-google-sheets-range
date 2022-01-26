@@ -3,6 +3,8 @@
 import sys
 import json
 import singer
+from singer import Catalog
+
 from tap_google_sheets_range.client import GoogleClient
 from tap_google_sheets_range.discover import discover
 from tap_google_sheets_range.sync import sync

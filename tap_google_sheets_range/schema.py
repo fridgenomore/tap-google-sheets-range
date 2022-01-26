@@ -12,7 +12,7 @@ def get_schemas(client, config):
     for stream_name, stream_object in STREAMS.items():
         if stream_name == 'file_metadata':
             all_streams.append(stream_object(client, config))
-        elif stream_name in ['sheet_data']:
+        elif stream_name in ['sheet']:
             sheets = config.list_sheets()
             for sheet_name in sheets:
                 all_streams.append(stream_object(client, config, None, sheet_name))
