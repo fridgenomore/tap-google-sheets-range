@@ -94,11 +94,11 @@ class Config:
     def get_sheet_cell_range(self, sheet_title):
         return self.sheets.get(sheet_title).data
 
-    def is_extract_link(self, sheet_title):
-        if self.sheets.get(sheet_title).extract_link == True:
-            return True
+    def is_link(self, sheet_title, header_name):
+        for header in self.list_sheet_headers(sheet_title):
+            if header.name == header_name:
+                return header.link
         return False
-
 
     def list_sheet_headers(self, sheet_title):
         headers = self.sheets.get(sheet_title).headers
@@ -158,15 +158,19 @@ class Config:
                 raise ValueError("Wrong sheet config. Columns count doesn't equal to headers count"
                                  ' Sheet:[{}] Range:[{}] Headers:[{}] Columns:[{}]'.
                                  format(sheet, self.get_sheet_cell_range(sheet), headers_count, cols_count))
+            headers = [h.name for h in self.list_sheet_headers(sheet)]
+            if len(headers) != len(set(headers)):
+                raise ValueError("Wrong sheet config. Found duplicate header.")
 
     class HeaderConfig:
-        def __init__(self, name, type=None, format=None):
+        def __init__(self, name, type=None, format=None, link=False):
             if not isinstance(name, str):
                 raise ValueError("Wrong header config. Header name is not a string. Header:[{}]"
                                  .format(name))
             self.name = name
             self.type = type or ["null", "string"]
             self.format = format
+            self.link = link
             self.check_config()
 
         def check_config(self):
@@ -185,7 +189,6 @@ class Config:
             self.headers = self.load_header_config(headers)
             self.data = data
             self.target_table = target_table
-            self.extract_link = extract_link
 
         def load_header_config(self, config):
             if not config:

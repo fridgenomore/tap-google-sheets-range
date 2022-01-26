@@ -203,11 +203,11 @@ class Sheet(Stream):
                 # Parse effectiveValue type
                 if column_effective_value is None or column_effective_value == '':
                     col_val = None
-                    LOGGER.info('WARNING: NO VALUE IN THE {}ND ROW [SHEET: {}, COL: {}, CELL: {}{}]'
-                                .format(row_index, self.sheet_title, col_name, col_letter, row_index))
+                    # LOGGER.info('WARNING: NO VALUE IN THE {}ND ROW SHEET:[{}], COL:[{}], CELL:[{}{}]'
+                    #             .format(row_index, self.sheet_title, col_name, col_letter, row_index))
                 elif column_effective_value in ('errorType', 'formulaType'):
                     col_val = str(val)
-                    raise Exception('DATA TYPE ERROR [SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}]'.format(
+                    raise Exception('DATA TYPE ERROR SHEET:[{}], COL:[{}], CELL:[{}{}], TYPE:[{}]'.format(
                         self.sheet_title, col_name, col_letter, row_index, key))
                 else:
                     is_empty = False
@@ -217,65 +217,66 @@ class Sheet(Stream):
                         # experimental - hyperlink is set in many keys + possible schema validation error
                         # extract hyperlink and cast to string (effective value may be number and etc)
                         # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/cells#celldata
-                        if self.config.is_extract_link(self.sheet_title) and value.get('hyperlink', False):
+                        if self.config.is_link(self.sheet_title, col_name):
                             column_effective_value_type = 'stringValue'
-                            col_val = value.get('hyperlink')
+                            col_val = value.get('hyperlink') or val
 
-                    # Set up actual data type
-                    # Convert dates/times from Lotus Notes Serial Numbers
-                    # DATE-TIME
-                    if column_number_format_type == 'DATE_TIME':
-                        col_val = excel_to_dttm_str(col_val) if isinstance(col_val, (int, float)) else col_val
-                    # DATE
-                    elif column_number_format_type == 'DATE':
-                        col_val = excel_to_dttm_str(col_val)[:10] if isinstance(col_val, (int, float)) else col_val
-                    # TIME ONLY (NO DATE)
-                    elif column_number_format_type == 'TIME':
-                        if isinstance(col_val, (int, float)):
-                            try:
+                    try:
+                        # Set up actual data type
+                        # Convert dates/times from Lotus Notes Serial Numbers
+                        # DATE-TIME
+                        if column_number_format_type == 'DATE_TIME':
+                            col_val = excel_to_dttm_str(col_val) if isinstance(col_val, (int, float)) else col_val
+                        # DATE
+                        elif column_number_format_type == 'DATE':
+                            col_val = excel_to_dttm_str(col_val)[:10] if isinstance(col_val, (int, float)) else col_val
+                        # TIME ONLY (NO DATE)
+                        elif column_number_format_type == 'TIME':
+                            if isinstance(col_val, (int, float)):
                                 total_secs = col_val * 86400  # seconds in day
                                 # Create string formatted like HH:MM:SS
                                 col_val = str(timedelta(seconds=total_secs))
-                            except ValueError:
-                                col_val = str(col_val)
-                                LOGGER.info(
-                                    'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                        self.sheet_title, col_name, col_letter, row_index, column_number_format_type))
-                    # NUMBER (INTEGER AND FLOAT)
-                    elif column_effective_value_type == 'numberType':
-                        if isinstance(col_val, int):
-                            col_val = int(col_val)
-                        elif isinstance(col_val, float):
-                            # Determine float decimal digits
-                            decimal_digits = str(col_val)[::-1].find('.')
-                            try:
+                        # NUMBER (INTEGER AND FLOAT)
+                        elif column_effective_value_type == 'numberType':
+                            if isinstance(col_val, int):
+                                col_val = int(col_val)
+                            elif isinstance(col_val, float):
+                                # Determine float decimal digits
+                                decimal_digits = str(col_val)[::-1].find('.')
                                 # ROUND to multipleOf: 1e-15 else no rounding
                                 col_val = float(round(col_val, 15)) if decimal_digits > 15 else float(col_val)
-                            except ValueError:
-                                col_val = str(col_val)
-                                LOGGER.info(
-                                    'WARNING: POSSIBLE DATA TYPE ERROR: SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                        self.sheet_title, col_name, col_letter, row_index, column_effective_value_type))
-                    # BOOLEAN
-                    elif column_effective_value_type == 'boolValue':
-                        if isinstance(col_val, bool):
-                            col_val = col_val
-                        elif isinstance(col_val, str):
-                            if col_val.lower() in ('true', 't', 'yes', 'y'):
-                                col_val = True
-                            elif col_val.lower() in ('false', 'f', 'no', 'n'):
-                                col_val = False
-                        elif isinstance(col_val, int):
-                            col_val = True if col_val in (1, -1) else False
-                    # STRING
-                    elif column_effective_value_type == 'stringValue':
-                        col_val = str(col_val)
-                    # OTHER: Convert everything else to a string
-                    else:
+                        # BOOLEAN
+                        elif column_effective_value_type == 'boolValue':
+                            if isinstance(col_val, bool):
+                                col_val = col_val
+                            elif isinstance(col_val, str):
+                                if col_val.lower() in ('true', 't', 'yes', 'y'):
+                                    col_val = True
+                                elif col_val.lower() in ('false', 'f', 'no', 'n'):
+                                    col_val = False
+                            elif isinstance(col_val, int):
+                                col_val = True if col_val in (1, -1) else False
+                        # STRING
+                        elif column_effective_value_type == 'stringValue':
+                            col_val = str(col_val)
+                        # OTHER: Convert everything else to a string
+                        else:
+                            col_val = str(col_val)
+                            LOGGER.info(
+                                'WARNING: POSSIBLE DATA TYPE ERROR;'
+                                ' SHEET:[{}], COL:[{}], CELL:[{}{}], TYPE:[{}], VALUE:[{}]'
+                                .format(self.sheet_title, col_name, col_letter, row_index,
+                                        column_effective_value_type, col_val)
+                            )
+                    except:
                         col_val = str(col_val)
                         LOGGER.info(
-                            'WARNING: POSSIBLE DATA TYPE ERROR; SHEET: {}, COL: {}, CELL: {}{}, TYPE: {}'.format(
-                                self.sheet_title, col_name, col_letter, row, column_effective_value_type))
+                            'WARNING: POSSIBLE DATA TYPE ERROR;'
+                            ' SHEET:[{}], COL:[{}], CELL:[{}{}], VALUE:[{}], INSTANCE:[{}], TYPE:[{}], FORMAT:[{}], '
+                                .format(self.sheet_title, col_name, col_letter, row_index,
+                                        col_val, type(col_val), column_effective_value_type, column_number_format_type)
+                        )
+                        raise
 
                 sheet_data_row_tf[col_name] = col_val
                 col_num = col_num + 1
