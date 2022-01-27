@@ -239,7 +239,7 @@ class Sheet(Stream):
                                 # Create string formatted like HH:MM:SS
                                 col_val = str(timedelta(seconds=total_secs))
                         # NUMBER (INTEGER AND FLOAT)
-                        elif column_effective_value_type == 'numberType':
+                        elif column_effective_value_type == 'numberValue':
                             if isinstance(col_val, int):
                                 col_val = int(col_val)
                             elif isinstance(col_val, float):
@@ -265,18 +265,18 @@ class Sheet(Stream):
                         else:
                             col_val = str(col_val)
                             LOGGER.info(
-                                'WARNING: POSSIBLE DATA TYPE ERROR;'
-                                ' SHEET:[{}], COL:[{}], CELL:[{}{}], TYPE:[{}], VALUE:[{}]'
+                                'WARNING: POSSIBLE DATA TYPE ERROR'
+                                ' SHEET:[{}], COL:[{}], CELL:[{}{}], VALUE:[{}], INSTANCE:[{}], TYPE:[{}], FORMAT:[{}],'
                                 .format(self.sheet_title, col_name, col_letter, row_index,
-                                        column_effective_value_type, col_val)
+                                        col_val, type(val), column_effective_value_type, column_number_format_type)
                             )
-                    except:
+                    except Exception:
                         col_val = str(col_val)
                         LOGGER.info(
-                            'WARNING: POSSIBLE DATA TYPE ERROR;'
-                            ' SHEET:[{}], COL:[{}], CELL:[{}{}], VALUE:[{}], INSTANCE:[{}], TYPE:[{}], FORMAT:[{}], '
-                                .format(self.sheet_title, col_name, col_letter, row_index,
-                                        col_val, type(col_val), column_effective_value_type, column_number_format_type)
+                            'ERROR: DATA TYPE CONVERSION FAILED'
+                            ' SHEET:[{}], COL:[{}], CELL:[{}{}], VALUE:[{}], INSTANCE:[{}], TYPE:[{}], FORMAT:[{}],'
+                            .format(self.sheet_title, col_name, col_letter, row_index,
+                                    col_val, type(val), column_effective_value_type, column_number_format_type)
                         )
                         raise
 
