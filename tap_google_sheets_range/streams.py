@@ -206,7 +206,7 @@ class Sheet(Stream):
                     # LOGGER.info('WARNING: NO VALUE IN THE {}ND ROW SHEET:[{}], COL:[{}], CELL:[{}{}]'
                     #             .format(row_index, self.sheet_title, col_name, col_letter, row_index))
                 elif column_effective_value in ('errorType', 'formulaType'):
-                    col_val = str(val)
+                    # col_val = str(val)
                     raise Exception('DATA TYPE ERROR SHEET:[{}], COL:[{}], CELL:[{}{}], TYPE:[{}]'.format(
                         self.sheet_title, col_name, col_letter, row_index, key))
                 else:
@@ -222,10 +222,12 @@ class Sheet(Stream):
                             col_val = value.get('hyperlink') or val
 
                     try:
-                        # Set up actual data type
+                        # replace a value from the list with None
+                        if col_val in self.config.null_values:
+                            col_val = None
                         # Convert dates/times from Lotus Notes Serial Numbers
                         # DATE-TIME
-                        if column_number_format_type == 'DATE_TIME':
+                        elif column_number_format_type == 'DATE_TIME':
                             col_val = excel_to_dttm_str(col_val) if isinstance(col_val, (int, float)) else col_val
                         # DATE
                         elif column_number_format_type == 'DATE':

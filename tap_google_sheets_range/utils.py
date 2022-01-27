@@ -67,7 +67,7 @@ def get_schema_from_file(stream_name):
 
 class Config:
     def __init__(self, sa_keyfile, spreadsheet_id, sheets, start_date, user_agent,
-                 batch_size=None, request_timeout=None):
+                 batch_size=None, request_timeout=None, null_values=None):
         self.sa_keyfile = sa_keyfile
         self.spreadsheet_id = spreadsheet_id
         self.sheets = self.load_sheet_config(sheets)
@@ -75,6 +75,7 @@ class Config:
         self.user_agent = user_agent
         self.batch_size = batch_size or 300
         self.request_timeout = request_timeout or 300
+        self.null_values = null_values or ['---']
 
     def load_sheet_config(self, config):
         if not config:
@@ -142,12 +143,12 @@ class Config:
     def check_config(self):
         for sheet in self.list_sheets():
             if not self.list_sheet_headers(sheet):
-                raise ValueError('Wrong sheet config. Header list is empty. Sheet: [{}]'.format(sheet))
+                raise ValueError('Wrong sheet config: Header list is empty. Sheet: [{}]'.format(sheet))
             if not self.get_sheet_cell_range(sheet):
-                raise ValueError('Wrong sheet config. Range is empty. Sheet: [{}]'.format(sheet))
+                raise ValueError('Wrong sheet config: Range is empty. Sheet: [{}]'.format(sheet))
             pattern = '[A-Z]{1,3}[0-9]*:[A-Z]{1,3}[0-9]*'
             if not re.match(pattern, self.get_sheet_cell_range(sheet)):
-                raise ValueError('Wrong sheet config. Range doesn\'t match to the pattern.'
+                raise ValueError('Wrong sheet config: Range doesn\'t match to the pattern.'
                                  ' Sheet: [{}] Range:[{}] Pattern: [{}]'.
                                  format(sheet, self.get_sheet_cell_range(sheet), pattern))
             cols_count = col_string_to_num(self.get_last_column(sheet)) - \
@@ -155,17 +156,19 @@ class Config:
                          1
             headers_count = len(self.list_sheet_headers(sheet))
             if headers_count != cols_count:
-                raise ValueError("Wrong sheet config. Columns count doesn't equal to headers count"
+                raise ValueError("Wrong sheet config: Columns count doesn't equal to headers count"
                                  ' Sheet:[{}] Range:[{}] Headers:[{}] Columns:[{}]'.
                                  format(sheet, self.get_sheet_cell_range(sheet), headers_count, cols_count))
             headers = [h.name for h in self.list_sheet_headers(sheet)]
             if len(headers) != len(set(headers)):
-                raise ValueError("Wrong sheet config. Found duplicate header.")
+                raise ValueError("Wrong sheet config: Found duplicate header.")
+            if not isinstance(self.null_values, list):
+                raise ValueError("Wrong config: null_values is not a list")
 
     class HeaderConfig:
         def __init__(self, name, type=None, format=None, link=False):
             if not isinstance(name, str):
-                raise ValueError("Wrong header config. Header name is not a string. Header:[{}]"
+                raise ValueError("Wrong header config: Header name is not a string. Header:[{}]"
                                  .format(name))
             self.name = name
             self.type = type or ["null", "string"]
@@ -185,7 +188,7 @@ class Config:
 
 
     class SheetConfig:
-        def __init__(self, headers, data, target_table=None, extract_link=False):
+        def __init__(self, headers, data, target_table=None):
             self.headers = self.load_header_config(headers)
             self.data = data
             self.target_table = target_table
